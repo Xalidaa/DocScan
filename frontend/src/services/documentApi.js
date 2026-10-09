@@ -6,8 +6,15 @@
 
 import axios from 'axios';
 
+const rawBase = import.meta.env.VITE_API_URL || '';
+let baseURL = '/api';
+if (rawBase) {
+  const trimmed = rawBase.replace(/\/$/, '');
+  baseURL = trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+}
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL,
   timeout: 60000, // 60s — LLM extraction can take a while
 });
 
@@ -22,6 +29,52 @@ api.interceptors.response.use(
     return Promise.reject(new Error(detail));
   }
 );
+
+// ─── Helper: Format validation flags (handles string or object flags) ──────
+function formatValidationFlags(flags) {
+  if (!Array.isArray(flags)) return [];
+  return flags.map((flag, idx) => {
+    if (typeof flag === 'string') {
+      let severity = 'warning';
+      const lower = flag.toLowerCase();
+      if (lower.includes('missing') || lower.includes('mismatch') || lower.includes('invalid')) {
+        severity = 'error';
+      }
+      return {
+        id: `api-flag-${idx}`,
+        severity,
+        category: 'Validation Flag',
+        title: flag.split(':')[0]?.trim() || 'Validation Issue',
+        message: flag,
+      };
+    }
+    if (typeof flag === 'object' && flag !== null) {
+      let severity = 'warning';
+      if (flag.severity === 'blocking' || flag.severity === 'error') {
+        severity = 'error';
+      } else if (flag.severity) {
+        severity = flag.severity;
+      }
+      const title = flag.title || flag.field || flag.type || 'Validation Issue';
+      const message = flag.message || flag.text || JSON.stringify(flag);
+      const category = flag.type || flag.category || 'Validation Flag';
+      return {
+        id: `api-flag-${idx}`,
+        severity,
+        category,
+        title: String(title),
+        message: String(message),
+      };
+    }
+    return {
+      id: `api-flag-${idx}`,
+      severity: 'warning',
+      category: 'Validation Flag',
+      title: 'Validation Issue',
+      message: String(flag),
+    };
+  });
+}
 
 // ─── Upload a document file and receive extracted invoice data ──────────────
 /**
@@ -82,23 +135,8 @@ export function mapApiResponseToDocument(apiData, file, docType = 'Invoice') {
   };
   const status = statusMap[apiData.status] ?? 'Pending Review';
 
-  // Map validation flags (plain strings) → warning objects the UI can render
-  const validationWarnings = (apiData.flags ?? []).map((flagMsg, idx) => {
-    // Determine severity from content keywords
-    let severity = 'warning';
-    if (flagMsg.toLowerCase().includes('missing') && flagMsg.toLowerCase().includes('supplier')) {
-      severity = 'error';
-    } else if (flagMsg.toLowerCase().includes('mismatch') || flagMsg.toLowerCase().includes('invalid')) {
-      severity = 'error';
-    }
-    return {
-      id: `api-flag-${idx}`,
-      severity,
-      category: 'Validation Flag',
-      title: flagMsg.split(':')[0]?.trim() ?? 'Validation Issue',
-      message: flagMsg,
-    };
-  });
+  // Map validation flags (objects or strings) → warning objects the UI can render
+  const validationWarnings = formatValidationFlags(apiData.flags);
 
   // Map API line items → UI line item shape
   const lineItems = (apiData.items ?? []).map((item, idx) => ({
@@ -238,28 +276,7 @@ export function mergeApiUpdate(existing, apiData) {
     totalAmount: 100,
   };
 
-  const validationWarnings = (apiData.flags ?? []).map((flagMsg, idx) => {
-    let severity = 'warning';
-    if (typeof flagMsg === 'string') {
-      if (flagMsg.toLowerCase().includes('missing') && flagMsg.toLowerCase().includes('supplier')) severity = 'error';
-      else if (flagMsg.toLowerCase().includes('mismatch') || flagMsg.toLowerCase().includes('invalid')) severity = 'error';
-      return {
-        id: `api-flag-${idx}`,
-        severity,
-        category: 'Validation Flag',
-        title: flagMsg.split(':')[0]?.trim() ?? 'Validation Issue',
-        message: flagMsg,
-      };
-    }
-    // flags may be dicts from backend
-    return {
-      id: `api-flag-${idx}`,
-      severity: flagMsg.severity ?? 'warning',
-      category: flagMsg.category ?? 'Validation Flag',
-      title: flagMsg.title ?? 'Issue',
-      message: flagMsg.message ?? JSON.stringify(flagMsg),
-    };
-  });
+  const validationWarnings = formatValidationFlags(apiData.flags);
 
   return {
     ...existing,
@@ -278,3 +295,4 @@ export function mergeApiUpdate(existing, apiData) {
     overallConfidence: Math.round((apiData.confidence ?? existing.overallConfidence / 100) * 1000) / 10,
   };
 }
+

@@ -17,4 +17,7 @@ class Settings(BaseSettings):
     ODOO_USER: str = os.getenv("ODOO_USER", "admin")
     ODOO_PASSWORD: str = os.getenv("ODOO_PASSWORD", "admin")
 
+    ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "*")
+
 settings = Settings()
+
