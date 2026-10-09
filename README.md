@@ -71,10 +71,9 @@ Advanced AI agent for automated invoice/PO extraction, validation, and ERP integ
 
 ```mermaid
 graph TD
-    User([Browser/Frontend]) -->|HTTPS/API| Backend[Backend API (Express + Node)]
+    User([Browser/Frontend]) -->|HTTPS/API| Backend[Backend API (FastAPI + Python)]
     
-    Backend -->|Auth| Auth[JWT + Bcrypt Authentication]
-    Backend -->|DB CRUD| Database[PostgreSQL Database]
+    Backend -->|DB CRUD| Database[SQLite Database]
     
     Backend -->|Business Logic| Validation[Multi-Stage Validation Engine]
     
@@ -82,8 +81,8 @@ graph TD
     Validation -->|Schema Check| Schemas[JSON Schemas]
     Validation -->|ERP Check| ERPSap[OData/SAP Integration]
     
-    Backend -->|AI Extraction| Gemini[Gemini AI API]
-    Backend -->|OCR Processing| Tesseract[Tesseract OCR]
+    Backend -->|AI Extraction| Claude[Claude AI API]
+    Backend -->|OCR Processing| Tesseract[Tesseract OCR & PyMuPDF]
     
     Backend -->|File Handling| Storage[Local File Storage]
     
@@ -101,11 +100,10 @@ graph TD
 - Dark mode support
 
 #### Backend (`/backend`)
-- Express.js REST API
-- PostgreSQL ORM (via Sequelize, although custom implementation used in code)
-- JWT Authentication with bcrypt
-- Gemini AI for text extraction and classification
-- Tesseract OCR for image processing
+- FastAPI REST API (Python)
+- SQLite with SQLAlchemy ORM
+- Claude AI for text extraction and classification
+- Tesseract OCR & PyMuPDF for image processing
 - Multi-stage validation engine
 
 #### Data Models
@@ -140,14 +138,13 @@ graph TD
 - npm >= 8.0.0
 
 **Backend:**
-- Node.js >= 16.0.0
-- PostgreSQL >= 13.0
+- Python >= 3.10
 - Tesseract OCR (system dependency)
   ```bash
   sudo apt update
   sudo apt install tesseract-ocr
   ```
-- Google Gemini API Key
+- Anthropic Claude API Key
 
 ---
 
@@ -162,34 +159,23 @@ cd DocScan-Agent
 #### 2. Install Backend Dependencies
 ```bash
 cd backend
-npm install
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
 #### 3. Configure Backend
 Create `.env` file in `/backend` directory:
 
 ```env
-PORT=5000
-NODE_ENV=development
-GEMINI_API_KEY=your_gemini_api_key_here
-FRONTEND_URL=http://localhost:3000
-
-DB_NAME=docscan
-DB_USER=postgres
-DB_PASSWORD=your_password
-DB_HOST=localhost
-DB_PORT=5432
+DATABASE_URL=sqlite:///./docscan.db
+CLAUDE_API_KEY=your_claude_api_key_here
+ERP_MOCK_MODE=True
+ODOO_URL=http://localhost:8069
 ```
 
 #### 4. Initialize Database
-Run migration script:
-```bash
-node init_db.js
-```
-This will:
-- Create `docscan` database
-- Run `schema.sql` migrations
-- Seed initial data
+Database tables are automatically created on startup (via SQLAlchemy `create_all`).
 
 #### 5. Install Frontend Dependencies
 ```bash
@@ -204,7 +190,7 @@ npm install
 #### Start Backend Server
 ```bash
 cd backend
-npm start
+uvicorn main:app --reload --port 5000
 ```
 Backend will run on `http://localhost:5000`
 
@@ -224,7 +210,7 @@ Open `http://localhost:3000` in your browser.
 #### 1. Configure Production
 Update `.env` in `/backend`:
 ```env
-NODE_ENV=production
+ERP_MOCK_MODE=False
 ```
 
 #### 2. Build Production Assets
@@ -237,11 +223,11 @@ This creates production build in `/frontend/dist`
 #### 3. Start Production Server
 ```bash
 cd backend
-npm run start
+uvicorn main:app --host 0.0.0.0 --port 5000 --workers 4
 ```
 
 **Production Considerations:**
-- Use process manager like PM2: `pm2 start server.js --name=docscan`
+- Use a production ASGI server setup (like Gunicorn with Uvicorn workers)
 - Set up environment variables in production environment
 - Configure proper logging and monitoring
 - Secure file uploads (use S3 or similar)
@@ -250,23 +236,30 @@ npm run start
 
 ## API Documentation
 
-### Authentication
+### Documents
 
-**Register User**
+**Upload Document**
 ```http
-POST /api/auth/register
-Content-Type: application/json
-
-{
-  "username": "admin",
-  "password": "[PASSWORD]"
-}
+POST /api/documents/upload
+Content-Type: multipart/form-data
 ```
 
-**Login**
+**List Documents**
 ```http
-POST /api/auth/login
-Content-Type: application/json
+GET /api/documents
+```
 
-{
-  "username": "admin",
+**Get Document**
+```http
+GET /api/documents/{document_id}
+```
+
+**Preprocess Document**
+```http
+POST /api/documents/{document_id}/preprocess
+```
+
+**Export Document**
+```http
+POST /api/documents/{document_id}/export
+```

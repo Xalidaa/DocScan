@@ -165,3 +165,116 @@ export function mapApiResponseToDocument(apiData, file, docType = 'Invoice') {
     boundingHighlights: {}, // not provided by backend; empty = no overlays shown
   };
 }
+// ─── Update a document's extracted fields via PUT ──────────────────────────
+/**
+ * Sends edited invoice header fields and line items to the backend.
+ * Only explicitly included fields are updated (partial update via model_fields_set).
+ *
+ * @param {string} documentId  Backend document UUID
+ * @param {object} fields      Object with keys: supplier, voen, invoice_number, date,
+ *                             subtotal, vat, total, items (optional)
+ * @returns {Promise<object>}  Raw InvoiceUploadResponse from the backend
+ */
+export async function updateDocument(documentId, fields) {
+  const { data } = await api.put(`/documents/${documentId}`, fields);
+  return data;
+}
+
+// ─── Update a document's status only (approve / reject) ────────────────────
+/**
+ * @param {string} documentId
+ * @param {'approved'|'rejected'} status  Lowercase status string
+ * @param {string} [note]                 Optional audit note
+ * @returns {Promise<object>}  Raw InvoiceUploadResponse from the backend
+ */
+export async function patchDocumentStatus(documentId, status, note = '') {
+  const { data } = await api.patch(`/documents/${documentId}/status`, { status, note });
+  return data;
+}
+
+// ─── Merge a server update response back into an existing frontend doc ──────
+/**
+ * Applies the server's InvoiceUploadResponse on top of an existing frontend doc object.
+ * Fields the server doesn't know about (fileName, type, confidenceScores, etc.)
+ * are preserved from the existing doc.
+ *
+ * @param {object} existing  Existing frontend document object
+ * @param {object} apiData   Raw server response from updateDocument() or patchDocumentStatus()
+ * @returns {object}  Updated frontend document object
+ */
+export function mergeApiUpdate(existing, apiData) {
+  const statusMap = {
+    received: 'Pending Review',
+    review_required: 'Pending Review',
+    processing: 'Processing',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    exported: 'Approved',
+  };
+
+  const lineItems = (apiData.items ?? []).map((item, idx) => ({
+    // Try to preserve the existing id so React keys are stable
+    id: existing.lineItems?.[idx]?.id ?? `api-item-${idx}`,
+    description: item.name ?? 'Line Item',
+    sku: null,
+    matchedSku: item.matched_product_code ?? null,
+    matchedProductName: item.matched_product_name ?? null,
+    matchConfidence: item.match_confidence ?? null,
+    qty: item.quantity ?? 1,
+    unitPrice: item.unit_price ?? 0,
+    amount: item.total ?? 0,
+    confidence: existing.overallConfidence ?? 100,
+  }));
+
+  // Rebuild per-field confidence at 100 for edited fields
+  const confidenceScores = {
+    ...existing.confidenceScores,
+    documentNumber: 100,
+    issueDate: 100,
+    vendor: 100,
+    vendorTaxId: 100,
+    subtotal: 100,
+    taxAmount: 100,
+    totalAmount: 100,
+  };
+
+  const validationWarnings = (apiData.flags ?? []).map((flagMsg, idx) => {
+    let severity = 'warning';
+    if (typeof flagMsg === 'string') {
+      if (flagMsg.toLowerCase().includes('missing') && flagMsg.toLowerCase().includes('supplier')) severity = 'error';
+      else if (flagMsg.toLowerCase().includes('mismatch') || flagMsg.toLowerCase().includes('invalid')) severity = 'error';
+      return {
+        id: `api-flag-${idx}`,
+        severity,
+        category: 'Validation Flag',
+        title: flagMsg.split(':')[0]?.trim() ?? 'Validation Issue',
+        message: flagMsg,
+      };
+    }
+    // flags may be dicts from backend
+    return {
+      id: `api-flag-${idx}`,
+      severity: flagMsg.severity ?? 'warning',
+      category: flagMsg.category ?? 'Validation Flag',
+      title: flagMsg.title ?? 'Issue',
+      message: flagMsg.message ?? JSON.stringify(flagMsg),
+    };
+  });
+
+  return {
+    ...existing,
+    status: statusMap[apiData.status] ?? existing.status,
+    vendor: apiData.supplier ?? existing.vendor,
+    vendorTaxId: apiData.voen ?? existing.vendorTaxId,
+    voen: apiData.voen ?? existing.voen,
+    documentNumber: apiData.invoice_number ?? existing.documentNumber,
+    issueDate: apiData.date ?? existing.issueDate,
+    subtotal: apiData.subtotal ?? existing.subtotal,
+    taxAmount: apiData.vat ?? existing.taxAmount,
+    totalAmount: apiData.total ?? existing.totalAmount,
+    lineItems: lineItems.length > 0 ? lineItems : existing.lineItems,
+    confidenceScores,
+    validationWarnings,
+    overallConfidence: Math.round((apiData.confidence ?? existing.overallConfidence / 100) * 1000) / 10,
+  };
+}
