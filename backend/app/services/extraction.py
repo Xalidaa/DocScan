@@ -87,15 +87,31 @@ class ExtractionService:
         )
 
         response_text = response.content[0].text.strip()
-        # Clean json backticks if any
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.startswith("```"):
-            response_text = response_text[3:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]
 
-        parsed = json.loads(response_text.strip())
+        def extract_json(text: str) -> dict:
+            match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL | re.IGNORECASE)
+            if match:
+                try:
+                    return json.loads(match.group(1).strip())
+                except json.JSONDecodeError:
+                    pass
+            
+            decoder = json.JSONDecoder()
+            idx = 0
+            while idx < len(text):
+                idx = text.find('{', idx)
+                if idx == -1:
+                    break
+                try:
+                    result, _ = decoder.raw_decode(text[idx:])
+                    if isinstance(result, dict):
+                        return result
+                except json.JSONDecodeError:
+                    pass
+                idx += 1
+            raise ValueError("Could not parse valid JSON from the LLM response.")
+
+        parsed = extract_json(response_text)
         return InvoiceExtractionSchema(**parsed)
 
     @staticmethod

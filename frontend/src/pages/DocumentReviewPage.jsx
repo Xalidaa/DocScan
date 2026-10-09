@@ -4,7 +4,7 @@ import {
   ArrowLeft, ZoomIn, ZoomOut, RotateCw, RotateCcw, CheckCircle2, 
   XCircle, AlertTriangle, ShieldCheck, Tag, Edit2, ChevronLeft, ChevronRight,
   Cpu, Layers, Building2, Receipt, Calendar, Hash, PackageSearch, Lock, Copy, 
-  AlertOctagon, HelpCircle, ShieldAlert, Check
+  AlertOctagon, HelpCircle, ShieldAlert, Check, Save, Loader2
 } from 'lucide-react';
 
 export default function DocumentReviewPage() {
@@ -14,6 +14,8 @@ export default function DocumentReviewPage() {
     setSelectedDocId, 
     updateDocumentStatus, 
     updateDocumentField, 
+    saveDocument,
+    savingDocId,
     setActiveView
   } = useDocuments();
 
@@ -419,12 +421,26 @@ export default function DocumentReviewPage() {
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">Verified OCR key-value extractions</p>
               </div>
-              <button
-                onClick={() => setIsEditingHeader(!isEditingHeader)}
-                className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1 shrink-0"
-              >
-                <Edit2 className="w-3.5 h-3.5" /> {isEditingHeader ? "Save Fields" : "Edit Fields"}
-              </button>
+              <div className="flex items-center gap-2">
+                {isEditingHeader && (
+                  <button
+                    onClick={async () => { await saveDocument(doc.id); setIsEditingHeader(false); }}
+                    disabled={savingDocId === doc.id}
+                    className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 shrink-0 disabled:opacity-60"
+                  >
+                    {savingDocId === doc.id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Save className="w-3.5 h-3.5" />}
+                    {savingDocId === doc.id ? 'Saving…' : 'Save to Backend'}
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsEditingHeader(!isEditingHeader)}
+                  className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1 shrink-0"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> {isEditingHeader ? 'Cancel' : 'Edit Fields'}
+                </button>
+              </div>
             </div>
 
             {/* 7 Requested Extracted Fields Grid */}
@@ -434,7 +450,11 @@ export default function DocumentReviewPage() {
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Supplier</span>
-                  <div className="font-extrabold text-xs text-slate-900 dark:text-slate-100 truncate">{doc.vendor}</div>
+                  {isEditingHeader
+                    ? <input type="text" value={doc.vendor || ''} onChange={e => updateDocumentField(doc.id, 'vendor', e.target.value)}
+                        className="w-full text-xs font-bold bg-white dark:bg-slate-700 border border-brand-400 rounded px-2 py-1 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40" />
+                    : <div className="font-extrabold text-xs text-slate-900 dark:text-slate-100 truncate">{doc.vendor}</div>
+                  }
                 </div>
                 {renderConfidenceBadge(scores.vendor || 99.8)}
               </div>
@@ -443,7 +463,11 @@ export default function DocumentReviewPage() {
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">VÖEN (Tax ID)</span>
-                  <div className="font-mono font-extrabold text-xs text-slate-900 dark:text-slate-100">{doc.voen || doc.vendorTaxId || '1400293841'}</div>
+                  {isEditingHeader
+                    ? <input type="text" value={doc.voen || doc.vendorTaxId || ''} onChange={e => updateDocumentField(doc.id, 'voen', e.target.value)}
+                        className="w-full text-xs font-mono font-bold bg-white dark:bg-slate-700 border border-brand-400 rounded px-2 py-1 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40" />
+                    : <div className="font-mono font-extrabold text-xs text-slate-900 dark:text-slate-100">{doc.voen || doc.vendorTaxId || '1400293841'}</div>
+                  }
                 </div>
                 {renderConfidenceBadge(scores.vendorTaxId || 96.4)}
               </div>
@@ -452,7 +476,11 @@ export default function DocumentReviewPage() {
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Date</span>
-                  <div className="font-extrabold text-xs text-slate-900 dark:text-slate-100">{doc.issueDate}</div>
+                  {isEditingHeader
+                    ? <input type="text" value={doc.issueDate || ''} onChange={e => updateDocumentField(doc.id, 'issueDate', e.target.value)}
+                        className="w-full text-xs font-bold bg-white dark:bg-slate-700 border border-brand-400 rounded px-2 py-1 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40" />
+                    : <div className="font-extrabold text-xs text-slate-900 dark:text-slate-100">{doc.issueDate}</div>
+                  }
                 </div>
                 {renderConfidenceBadge(scores.issueDate || 98.5)}
               </div>
@@ -461,7 +489,11 @@ export default function DocumentReviewPage() {
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Invoice #</span>
-                  <div className="font-mono font-extrabold text-xs text-slate-900 dark:text-slate-100">{doc.documentNumber}</div>
+                  {isEditingHeader
+                    ? <input type="text" value={doc.documentNumber || ''} onChange={e => updateDocumentField(doc.id, 'documentNumber', e.target.value)}
+                        className="w-full text-xs font-mono font-bold bg-white dark:bg-slate-700 border border-brand-400 rounded px-2 py-1 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40" />
+                    : <div className="font-mono font-extrabold text-xs text-slate-900 dark:text-slate-100">{doc.documentNumber}</div>
+                  }
                 </div>
                 {renderConfidenceBadge(scores.documentNumber || 99.2)}
               </div>
@@ -591,14 +623,15 @@ export default function DocumentReviewPage() {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => updateDocumentStatus(doc.id, 'Rejected', reviewNote)}
-                className="py-3 px-4 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 rounded-2xl font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2"
+                disabled={savingDocId === doc.id}
+                className="py-3 px-4 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 rounded-2xl font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <XCircle className="w-4 h-4" /> Reject Document
               </button>
 
               <button
                 onClick={() => updateDocumentStatus(doc.id, 'Approved', reviewNote)}
-                disabled={hasBlocking}
+                disabled={hasBlocking || savingDocId === doc.id}
                 className={`py-3 px-4 rounded-2xl font-extrabold text-xs shadow-lg transition-all flex items-center justify-center gap-2 ${
                   hasBlocking
                     ? 'bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-500 cursor-not-allowed shadow-none'

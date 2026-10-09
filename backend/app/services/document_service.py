@@ -4,7 +4,7 @@ from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 from app.models.document import Document, DocumentStatus, InvoiceData, LineItem
 from app.core.config import settings
-from app.schemas.invoice import InvoiceUploadResponse, InvoiceItem
+from app.schemas.invoice import InvoiceUploadResponse, InvoiceItem, InvoiceExtractionSchema
 from app.services.preprocessing import Preprocessor
 from app.services.extraction import ExtractionService
 from app.services.validation import ValidationService
@@ -158,6 +158,134 @@ class DocumentService:
             status=db_status.value
         )
         
+    @staticmethod
+    def update_document(db: Session, document_id: str, update_data: InvoiceExtractionSchema) -> InvoiceUploadResponse:
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+        if doc.status not in [DocumentStatus.REVIEW_REQUIRED, DocumentStatus.RECEIVED, DocumentStatus.PROCESSING]:
+            raise HTTPException(status_code=400, detail=f"Document cannot be updated in its current status: {doc.status.value}")
+            
+        inv = doc.invoice_data
+        if not inv:
+            raise HTTPException(status_code=400, detail="Document has no invoice data to update")
+
+        # Update fields
+        if update_data.supplier is not None: inv.supplier_name = update_data.supplier
+        if update_data.voen is not None: inv.tin_voen = update_data.voen
+        if update_data.invoice_number is not None: inv.invoice_number = update_data.invoice_number
+        if update_data.date is not None: inv.date = update_data.date
+        if update_data.subtotal is not None: inv.subtotal_amount = update_data.subtotal
+        if update_data.vat is not None: inv.vat_amount = update_data.vat
+        if update_data.total is not None: inv.total_amount = update_data.total
+
+        doc.status = DocumentStatus.APPROVED
+        
+        if "items" in update_data.model_fields_set:
+            db.query(LineItem).filter(LineItem.invoice_data_id == inv.id).delete()
+            for item in update_data.items:
+                db_item = LineItem(
+                    invoice_data_id=inv.id,
+                    original_name=item.name,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    total_price=item.total
+                )
+                db.add(db_item)
+                
+        db.commit()
+        db.refresh(doc)
+        db.refresh(inv)
+
+        items_response = []
+        for item in inv.line_items:
+            items_response.append(InvoiceItem(
+                name=item.original_name or "",
+                quantity=item.quantity or 1.0,
+                unit_price=item.unit_price or 0.0,
+                total=item.total_price or 0.0,
+                matched_product_code=item.matched_product_code,
+                matched_product_name=item.matched_product_name,
+                match_confidence=item.confidence_score,
+                match_status="matched" if item.confidence_score and item.confidence_score >= 80 else "unmatched"
+            ))
+
+        return InvoiceUploadResponse(
+            document_id=doc.id,
+            filename=doc.filename,
+            supplier=inv.supplier_name,
+            voen=inv.tin_voen,
+            invoice_number=inv.invoice_number,
+            date=inv.date,
+            subtotal=inv.subtotal_amount,
+            vat=inv.vat_amount,
+            total=inv.total_amount,
+            items=items_response,
+            confidence=inv.overall_confidence or 1.0,
+            flags=inv.validation_flags or [],
+            status=doc.status.value
+        )
+        
+    @staticmethod
+    def update_document_status(db: Session, document_id: str, new_status: str, note: str = None) -> InvoiceUploadResponse:
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        status_map = {
+            "approved": DocumentStatus.APPROVED,
+            "rejected": DocumentStatus.REJECTED,
+        }
+        target = status_map.get(new_status.lower())
+        if not target:
+            raise HTTPException(status_code=400, detail=f"Unsupported status transition: {new_status}")
+
+        # REJECTED can be applied from any non-exported state
+        if doc.status == DocumentStatus.EXPORTED:
+            raise HTTPException(status_code=400, detail="Exported documents cannot have their status changed")
+
+        # APPROVED via this endpoint (no field edits) requires editable state
+        if target == DocumentStatus.APPROVED and doc.status not in [
+            DocumentStatus.REVIEW_REQUIRED, DocumentStatus.RECEIVED, DocumentStatus.PROCESSING, DocumentStatus.REJECTED
+        ]:
+            raise HTTPException(status_code=400, detail=f"Cannot approve document in status: {doc.status.value}")
+
+        doc.status = target
+        db.commit()
+        db.refresh(doc)
+
+        inv = doc.invoice_data
+        items_response = []
+        if inv and inv.line_items:
+            for item in inv.line_items:
+                items_response.append(InvoiceItem(
+                    name=item.original_name or "",
+                    quantity=item.quantity or 1.0,
+                    unit_price=item.unit_price or 0.0,
+                    total=item.total_price or 0.0,
+                    matched_product_code=item.matched_product_code,
+                    matched_product_name=item.matched_product_name,
+                    match_confidence=item.confidence_score,
+                    match_status="matched" if item.confidence_score and item.confidence_score >= 80 else "unmatched"
+                ))
+
+        return InvoiceUploadResponse(
+            document_id=doc.id,
+            filename=doc.filename,
+            supplier=inv.supplier_name if inv else None,
+            voen=inv.tin_voen if inv else None,
+            invoice_number=inv.invoice_number if inv else None,
+            date=inv.date if inv else None,
+            subtotal=inv.subtotal_amount if inv else None,
+            vat=inv.vat_amount if inv else None,
+            total=inv.total_amount if inv else None,
+            items=items_response,
+            confidence=inv.overall_confidence if inv else 1.0,
+            flags=inv.validation_flags if inv else [],
+            status=doc.status.value
+        )
+
     @staticmethod
     def list_documents(db: Session, skip: int = 0, limit: int = 100):
         return db.query(Document).offset(skip).limit(limit).all()
