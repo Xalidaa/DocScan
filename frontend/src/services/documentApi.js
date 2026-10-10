@@ -105,6 +105,69 @@ export async function listDocuments(params = {}) {
   return data;
 }
 
+// ─── Map backend DocumentResponse item to frontend document shape ──────────
+export function mapListItemToDocument(doc) {
+  const statusMap = {
+    received: 'Pending Review',
+    review_required: 'Pending Review',
+    processing: 'Processing',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    exported: 'Approved',
+  };
+  const status = statusMap[doc.status] ?? 'Pending Review';
+
+  let uploadDate = '';
+  let issueDate = '';
+  if (doc.created_at) {
+    try {
+      const d = new Date(doc.created_at);
+      uploadDate = d.toISOString().replace('T', ' ').substring(0, 16);
+      issueDate = d.toISOString().substring(0, 10);
+    } catch {
+      uploadDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
+      issueDate = new Date().toISOString().substring(0, 10);
+    }
+  } else {
+    uploadDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    issueDate = new Date().toISOString().substring(0, 10);
+  }
+
+  const docId = doc.id;
+  const shortId = typeof docId === 'string' && docId.length >= 6 ? docId.substring(0, 6) : docId;
+
+  return {
+    id: docId,
+    fileName: doc.filename ?? 'Uploaded_Document.pdf',
+    type: doc.document_type || 'Invoice',
+    status,
+    overallConfidence: 100,
+    uploadDate,
+    processedTime: 'via API',
+
+    vendor: 'Unknown Vendor',
+    vendorAddress: '',
+    vendorTaxId: 'N/A',
+    voen: null,
+
+    documentNumber: `DOC-${shortId}`,
+    issueDate,
+    dueDate: 'N/A',
+    purchaseOrder: 'N/A',
+
+    subtotal: 0,
+    taxAmount: 0,
+    totalAmount: 0,
+    currency: 'USD',
+
+    confidenceScores: {},
+    validationWarnings: [],
+    lineItems: [],
+    pageCount: 1,
+    boundingHighlights: {},
+  };
+}
+
 // ─── Fetch a single document by ID ─────────────────────────────────────────
 export async function getDocument(documentId) {
   const { data } = await api.get(`/documents/${documentId}`);

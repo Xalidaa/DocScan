@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { INITIAL_DOCUMENTS, RECENT_ACTIVITIES } from '../data/mockDocuments';
 import {
+  listDocuments,
+  mapListItemToDocument,
   uploadDocument as apiUploadDocument,
   mapApiResponseToDocument,
   updateDocument as apiUpdateDocument,
@@ -20,6 +22,30 @@ export function DocumentProvider({ children }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [uploadError, setUploadError] = useState(null);
   const [savingDocId, setSavingDocId] = useState(null);
+
+  // ── Fetch existing documents from live FastAPI backend on mount ───────────
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchRemoteDocuments() {
+      try {
+        const remoteDocs = await listDocuments();
+        if (!isMounted || !Array.isArray(remoteDocs) || remoteDocs.length === 0) return;
+        const mappedRemote = remoteDocs.map(mapListItemToDocument);
+        setDocuments(prevDocs => {
+          const existingIds = new Set(prevDocs.map(d => d.id));
+          const newDocs = mappedRemote.filter(d => !existingIds.has(d.id));
+          if (newDocs.length === 0) return prevDocs;
+          return [...newDocs, ...prevDocs];
+        });
+      } catch (err) {
+        console.warn('Could not fetch backend documents on mount:', err?.message || err);
+      }
+    }
+    fetchRemoteDocuments();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // ── Toast notification system ─────────────────────────────────────────────
   const addToast = (type, title, message) => {
