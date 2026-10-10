@@ -29,10 +29,10 @@ export default function DocumentListPage() {
     // Search query
     if (searchQuery.trim() !== '') {
       const q = searchQuery.toLowerCase();
-      const matchVendor = doc.vendor.toLowerCase().includes(q);
-      const matchDocNum = doc.documentNumber.toLowerCase().includes(q);
-      const matchFile = doc.fileName.toLowerCase().includes(q);
-      const matchPO = doc.purchaseOrder.toLowerCase().includes(q);
+      const matchVendor = (doc.vendor || '').toLowerCase().includes(q);
+      const matchDocNum = (doc.documentNumber || '').toLowerCase().includes(q);
+      const matchFile = (doc.fileName || '').toLowerCase().includes(q);
+      const matchPO = (doc.purchaseOrder || '').toLowerCase().includes(q);
       const matchId = doc.id.toLowerCase().includes(q);
       return matchVendor || matchDocNum || matchFile || matchPO || matchId;
     }
@@ -256,7 +256,7 @@ export default function DocumentListPage() {
                         <div className="text-[11px] font-mono text-slate-400">{doc.purchaseOrder}</div>
                       </td>
                       <td className="p-4 text-right font-extrabold text-slate-900 dark:text-slate-100">
-                        ${(doc.totalAmount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {doc.totalAmount != null ? `$${Number(doc.totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'N/A'}
                       </td>
                       <td className="p-4 text-center">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold ${

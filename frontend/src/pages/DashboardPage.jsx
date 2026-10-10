@@ -181,7 +181,7 @@ export default function DashboardPage() {
                           {doc.vendor}
                         </td>
                         <td className="py-3 pr-2 text-right font-extrabold text-slate-900 dark:text-slate-100">
-                          ${doc.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          {doc.totalAmount != null ? `$${Number(doc.totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'N/A'}
                         </td>
                         <td className="py-3 text-center">
                           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${

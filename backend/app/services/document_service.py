@@ -1,9 +1,10 @@
 import os
 import shutil
 from fastapi import UploadFile, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.document import Document, DocumentStatus, InvoiceData, LineItem
 from app.core.config import settings
+from app.schemas.document import DocumentResponse
 from app.schemas.invoice import InvoiceUploadResponse, InvoiceItem, InvoiceExtractionSchema
 from app.services.preprocessing import Preprocessor
 from app.services.extraction import ExtractionService
@@ -287,19 +288,62 @@ class DocumentService:
         )
 
     @staticmethod
+    def _build_document_response(doc: Document) -> DocumentResponse:
+        inv = doc.invoice_data
+        items_response = []
+        if inv and inv.line_items:
+            for item in inv.line_items:
+                items_response.append(InvoiceItem(
+                    name=item.original_name or "",
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    total=item.total_price,
+                    matched_product_code=item.matched_product_code,
+                    matched_product_name=item.matched_product_name,
+                    match_confidence=item.confidence_score,
+                    match_status="matched" if (item.confidence_score is not None and item.confidence_score >= 80) else "unmatched"
+                ))
+
+        return DocumentResponse(
+            id=doc.id,
+            filename=doc.filename,
+            status=doc.status,
+            source=doc.source,
+            document_type=doc.document_type,
+            created_at=doc.created_at,
+            supplier=inv.supplier_name if inv else None,
+            voen=inv.tin_voen if inv else None,
+            invoice_number=inv.invoice_number if inv else None,
+            date=inv.date if inv else None,
+            subtotal=inv.subtotal_amount if inv else None,
+            vat=inv.vat_amount if inv else None,
+            total=inv.total_amount if inv else None,
+            items=items_response,
+            confidence=inv.overall_confidence if (inv and inv.overall_confidence is not None) else 1.0,
+            flags=inv.validation_flags if (inv and inv.validation_flags is not None) else []
+        )
+
+    @staticmethod
     def list_documents(db: Session, skip: int = 0, limit: int = 100):
-        return db.query(Document).offset(skip).limit(limit).all()
+        docs = db.query(Document).options(
+            joinedload(Document.invoice_data).joinedload(InvoiceData.line_items)
+        ).offset(skip).limit(limit).all()
+        return [DocumentService._build_document_response(doc) for doc in docs]
         
     @staticmethod
     def get_document(db: Session, document_id: str):
-        doc = db.query(Document).filter(Document.id == document_id).first()
+        doc = db.query(Document).options(
+            joinedload(Document.invoice_data).joinedload(InvoiceData.line_items)
+        ).filter(Document.id == document_id).first()
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
-        return doc
+        return DocumentService._build_document_response(doc)
 
     @staticmethod
     def export_document(db: Session, document_id: str):
-        doc = DocumentService.get_document(db, document_id)
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
         if not doc.invoice_data:
             raise HTTPException(status_code=400, detail="Document has no extracted invoice data to export")
             

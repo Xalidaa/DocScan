@@ -304,15 +304,15 @@ export default function DocumentReviewPage() {
                   <div className="w-48 space-y-1 text-right text-[11px]">
                     <div className="flex justify-between text-slate-500">
                       <span>Subtotal:</span>
-                      <span className="font-semibold">${(doc.subtotal ?? 0).toFixed(2)}</span>
+                      <span className="font-semibold">{doc.subtotal != null ? `$${Number(doc.subtotal).toFixed(2)}` : 'N/A'}</span>
                     </div>
                     <div className="flex justify-between text-slate-500">
                       <span>VAT Tax:</span>
-                      <span className="font-semibold">${(doc.taxAmount ?? 0).toFixed(2)}</span>
+                      <span className="font-semibold">{doc.taxAmount != null ? `$${Number(doc.taxAmount).toFixed(2)}` : 'N/A'}</span>
                     </div>
                     <div className="flex justify-between text-slate-900 font-extrabold text-sm border-t pt-1">
                       <span>Total ({doc.currency}):</span>
-                      <span className="text-brand-700">${(doc.totalAmount ?? 0).toFixed(2)}</span>
+                      <span className="text-brand-700">{doc.totalAmount != null ? `$${Number(doc.totalAmount).toFixed(2)}` : 'N/A'}</span>
                     </div>
                   </div>
                 </div>
@@ -466,7 +466,7 @@ export default function DocumentReviewPage() {
                   {isEditingHeader
                     ? <input type="text" value={doc.voen || doc.vendorTaxId || ''} onChange={e => updateDocumentField(doc.id, 'voen', e.target.value)}
                         className="w-full text-xs font-mono font-bold bg-white dark:bg-slate-700 border border-brand-400 rounded px-2 py-1 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40" />
-                    : <div className="font-mono font-extrabold text-xs text-slate-900 dark:text-slate-100">{doc.voen || doc.vendorTaxId || '1400293841'}</div>
+                    : <div className="font-mono font-extrabold text-xs text-slate-900 dark:text-slate-100">{doc.voen || doc.vendorTaxId || 'N/A'}</div>
                   }
                 </div>
                 {renderConfidenceBadge(scores.vendorTaxId || 96.4)}
@@ -505,21 +505,21 @@ export default function DocumentReviewPage() {
                     <span>Subtotal</span>
                     {renderConfidenceBadge(scores.subtotal || 99.1)}
                   </div>
-                  <div className="font-bold text-xs text-slate-900 dark:text-slate-100 mt-1">${(doc.subtotal ?? 0).toFixed(2)}</div>
+                  <div className="font-bold text-xs text-slate-900 dark:text-slate-100 mt-1">{doc.subtotal != null ? `$${Number(doc.subtotal).toFixed(2)}` : 'N/A'}</div>
                 </div>
                 <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
                   <div className="flex justify-between items-center text-[9px] font-bold text-slate-400 uppercase">
                     <span>VAT</span>
                     {renderConfidenceBadge(scores.taxAmount || 94.0)}
                   </div>
-                  <div className="font-bold text-xs text-slate-900 dark:text-slate-100 mt-1">${(doc.taxAmount ?? 0).toFixed(2)}</div>
+                  <div className="font-bold text-xs text-slate-900 dark:text-slate-100 mt-1">{doc.taxAmount != null ? `$${Number(doc.taxAmount).toFixed(2)}` : 'N/A'}</div>
                 </div>
                 <div className="p-2.5 rounded-2xl bg-brand-50 dark:bg-brand-950/60 border border-brand-200 dark:border-brand-800">
                   <div className="flex justify-between items-center text-[9px] font-bold text-brand-600 dark:text-brand-300 uppercase">
                     <span>Total</span>
                     {renderConfidenceBadge(scores.totalAmount || 99.5)}
                   </div>
-                  <div className="font-black text-xs text-brand-700 dark:text-brand-300 mt-1">${(doc.totalAmount ?? 0).toFixed(2)}</div>
+                  <div className="font-black text-xs text-brand-700 dark:text-brand-300 mt-1">{doc.totalAmount != null ? `$${Number(doc.totalAmount).toFixed(2)}` : 'N/A'}</div>
                 </div>
               </div>
 

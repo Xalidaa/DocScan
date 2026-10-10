@@ -107,65 +107,7 @@ export async function listDocuments(params = {}) {
 
 // ─── Map backend DocumentResponse item to frontend document shape ──────────
 export function mapListItemToDocument(doc) {
-  const statusMap = {
-    received: 'Pending Review',
-    review_required: 'Pending Review',
-    processing: 'Processing',
-    approved: 'Approved',
-    rejected: 'Rejected',
-    exported: 'Approved',
-  };
-  const status = statusMap[doc.status] ?? 'Pending Review';
-
-  let uploadDate = '';
-  let issueDate = '';
-  if (doc.created_at) {
-    try {
-      const d = new Date(doc.created_at);
-      uploadDate = d.toISOString().replace('T', ' ').substring(0, 16);
-      issueDate = d.toISOString().substring(0, 10);
-    } catch {
-      uploadDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
-      issueDate = new Date().toISOString().substring(0, 10);
-    }
-  } else {
-    uploadDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
-    issueDate = new Date().toISOString().substring(0, 10);
-  }
-
-  const docId = doc.id;
-  const shortId = typeof docId === 'string' && docId.length >= 6 ? docId.substring(0, 6) : docId;
-
-  return {
-    id: docId,
-    fileName: doc.filename ?? 'Uploaded_Document.pdf',
-    type: doc.document_type || 'Invoice',
-    status,
-    overallConfidence: 100,
-    uploadDate,
-    processedTime: 'via API',
-
-    vendor: 'Unknown Vendor',
-    vendorAddress: '',
-    vendorTaxId: 'N/A',
-    voen: null,
-
-    documentNumber: `DOC-${shortId}`,
-    issueDate,
-    dueDate: 'N/A',
-    purchaseOrder: 'N/A',
-
-    subtotal: 0,
-    taxAmount: 0,
-    totalAmount: 0,
-    currency: 'USD',
-
-    confidenceScores: {},
-    validationWarnings: [],
-    lineItems: [],
-    pageCount: 1,
-    boundingHighlights: {},
-  };
+  return mapApiResponseToDocument(doc, null, doc.document_type || 'Invoice');
 }
 
 // ─── Fetch a single document by ID ─────────────────────────────────────────
@@ -176,16 +118,18 @@ export async function getDocument(documentId) {
 
 // ─── Map raw API response to the frontend document shape ───────────────────
 /**
- * Converts an InvoiceUploadResponse from the backend into the document object
- * shape expected by DocumentContext and all UI components.
+ * Converts an InvoiceUploadResponse or DocumentResponse from the backend into the
+ * document object shape expected by DocumentContext and all UI components.
  *
- * @param {object} apiData   Raw response from uploadDocument()
- * @param {File}   file      The original File object uploaded by the user
- * @param {string} docType   User-selected doc type ('Invoice' | 'Delivery Note' | 'Receipt')
+ * @param {object} apiData   Raw response from uploadDocument(), getDocument(), or listDocuments()
+ * @param {File}   [file]    The original File object uploaded by the user
+ * @param {string} [docType] User-selected doc type ('Invoice' | 'Delivery Note' | 'Receipt')
  * @returns {object}  Frontend document object
  */
 export function mapApiResponseToDocument(apiData, file, docType = 'Invoice') {
+  const docId = apiData.id || apiData.document_id;
   const confidencePct = Math.round((apiData.confidence ?? 0.9) * 1000) / 10;
+  const shortId = typeof docId === 'string' && docId.length >= 6 ? docId.substring(0, 6) : docId;
 
   // Map backend status → UI status label
   const statusMap = {
@@ -205,16 +149,17 @@ export function mapApiResponseToDocument(apiData, file, docType = 'Invoice') {
   const lineItems = (apiData.items ?? []).map((item, idx) => ({
     id: `api-item-${idx}`,
     description: item.name ?? 'Line Item',
-    sku: null,
-    matchedSku: null,
-    matchConfidence: null,
-    qty: item.quantity ?? 1,
-    unitPrice: item.unit_price ?? 0,
-    amount: item.total ?? 0,
+    sku: item.matched_product_code ?? null,
+    matchedSku: item.matched_product_code ?? null,
+    matchedProductName: item.matched_product_name ?? null,
+    matchConfidence: item.match_confidence ?? null,
+    qty: item.quantity ?? null,
+    unitPrice: item.unit_price ?? null,
+    amount: item.total ?? null,
     confidence: confidencePct,
   }));
 
-  // Spread overall confidence to per-field scores (backend provides one scalar)
+  // Spread overall confidence to per-field scores
   const confidenceScores = {
     documentNumber: confidencePct,
     issueDate: confidencePct,
@@ -226,32 +171,48 @@ export function mapApiResponseToDocument(apiData, file, docType = 'Invoice') {
     totalAmount: confidencePct,
   };
 
+  let uploadDate = '';
+  let issueDate = apiData.date || '';
+  if (apiData.created_at) {
+    try {
+      const d = new Date(apiData.created_at);
+      uploadDate = d.toISOString().replace('T', ' ').substring(0, 16);
+      if (!issueDate) issueDate = d.toISOString().substring(0, 10);
+    } catch {
+      uploadDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
+      if (!issueDate) issueDate = new Date().toISOString().substring(0, 10);
+    }
+  } else {
+    uploadDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    if (!issueDate) issueDate = new Date().toISOString().substring(0, 10);
+  }
+
   return {
     // Identity
-    id: apiData.document_id,
+    id: docId,
     fileName: file?.name ?? apiData.filename ?? 'Uploaded_Document.pdf',
-    type: docType,
+    type: apiData.document_type || docType,
     status,
     overallConfidence: confidencePct,
-    uploadDate: new Date().toISOString().replace('T', ' ').substring(0, 16),
+    uploadDate,
     processedTime: 'via API',
 
     // Vendor / supplier
-    vendor: apiData.supplier ?? 'Unknown Vendor',
+    vendor: apiData.supplier ?? 'N/A',
     vendorAddress: '',
     vendorTaxId: apiData.voen ?? 'N/A',
     voen: apiData.voen ?? null,
 
     // Invoice header fields
-    documentNumber: apiData.invoice_number ?? `DOC-${apiData.document_id.substring(0, 6)}`,
-    issueDate: apiData.date ?? new Date().toISOString().substring(0, 10),
+    documentNumber: apiData.invoice_number || (shortId ? `DOC-${shortId}` : 'N/A'),
+    issueDate: issueDate || 'N/A',
     dueDate: 'N/A',
     purchaseOrder: 'N/A',
 
     // Financials
-    subtotal: apiData.subtotal ?? 0,
-    taxAmount: apiData.vat ?? 0,
-    totalAmount: apiData.total ?? 0,
+    subtotal: apiData.subtotal ?? null,
+    taxAmount: apiData.vat ?? null,
+    totalAmount: apiData.total ?? null,
     currency: 'USD',
 
     // Quality & validation
@@ -263,9 +224,10 @@ export function mapApiResponseToDocument(apiData, file, docType = 'Invoice') {
 
     // Document viewer meta
     pageCount: 1,
-    boundingHighlights: {}, // not provided by backend; empty = no overlays shown
+    boundingHighlights: {},
   };
 }
+
 // ─── Update a document's extracted fields via PUT ──────────────────────────
 /**
  * Sends edited invoice header fields and line items to the backend.
@@ -317,13 +279,13 @@ export function mergeApiUpdate(existing, apiData) {
     // Try to preserve the existing id so React keys are stable
     id: existing.lineItems?.[idx]?.id ?? `api-item-${idx}`,
     description: item.name ?? 'Line Item',
-    sku: null,
+    sku: item.matched_product_code ?? existing.lineItems?.[idx]?.sku ?? null,
     matchedSku: item.matched_product_code ?? null,
     matchedProductName: item.matched_product_name ?? null,
     matchConfidence: item.match_confidence ?? null,
-    qty: item.quantity ?? 1,
-    unitPrice: item.unit_price ?? 0,
-    amount: item.total ?? 0,
+    qty: item.quantity ?? null,
+    unitPrice: item.unit_price ?? null,
+    amount: item.total ?? null,
     confidence: existing.overallConfidence ?? 100,
   }));
 
@@ -344,18 +306,17 @@ export function mergeApiUpdate(existing, apiData) {
   return {
     ...existing,
     status: statusMap[apiData.status] ?? existing.status,
-    vendor: apiData.supplier ?? existing.vendor,
-    vendorTaxId: apiData.voen ?? existing.vendorTaxId,
-    voen: apiData.voen ?? existing.voen,
-    documentNumber: apiData.invoice_number ?? existing.documentNumber,
-    issueDate: apiData.date ?? existing.issueDate,
-    subtotal: apiData.subtotal ?? existing.subtotal,
-    taxAmount: apiData.vat ?? existing.taxAmount,
-    totalAmount: apiData.total ?? existing.totalAmount,
+    vendor: apiData.supplier !== undefined ? (apiData.supplier ?? 'N/A') : existing.vendor,
+    vendorTaxId: apiData.voen !== undefined ? (apiData.voen ?? 'N/A') : existing.vendorTaxId,
+    voen: apiData.voen !== undefined ? apiData.voen : existing.voen,
+    documentNumber: apiData.invoice_number !== undefined ? (apiData.invoice_number || existing.documentNumber) : existing.documentNumber,
+    issueDate: apiData.date !== undefined ? (apiData.date || existing.issueDate) : existing.issueDate,
+    subtotal: apiData.subtotal !== undefined ? apiData.subtotal : existing.subtotal,
+    taxAmount: apiData.vat !== undefined ? apiData.vat : existing.taxAmount,
+    totalAmount: apiData.total !== undefined ? apiData.total : existing.totalAmount,
     lineItems: lineItems.length > 0 ? lineItems : existing.lineItems,
     confidenceScores,
     validationWarnings,
     overallConfidence: Math.round((apiData.confidence ?? existing.overallConfidence / 100) * 1000) / 10,
   };
 }
-

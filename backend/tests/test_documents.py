@@ -64,6 +64,13 @@ def test_list_documents(client):
     assert isinstance(data, list)
     assert len(data) >= 1
     assert data[0]["filename"] == "doc1.pdf"
+    assert "supplier" in data[0]
+    assert "voen" in data[0]
+    assert "invoice_number" in data[0]
+    assert "subtotal" in data[0]
+    assert "vat" in data[0]
+    assert "total" in data[0]
+    assert "items" in data[0]
 
 def test_get_document(client):
     upload_response = client.post(
@@ -78,6 +85,16 @@ def test_get_document(client):
     assert data["id"] == doc_id
     assert data["filename"] == "doc2.pdf"
     assert data["source"] == "upload"
+    assert "supplier" in data
+    assert "voen" in data
+    assert "invoice_number" in data
+    assert "date" in data
+    assert "subtotal" in data
+    assert "vat" in data
+    assert "total" in data
+    assert "items" in data
+    assert "confidence" in data
+    assert "flags" in data
 
 def test_health_check(client):
     response = client.get("/health")

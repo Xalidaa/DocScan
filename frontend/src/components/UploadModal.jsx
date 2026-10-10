@@ -163,7 +163,7 @@ export default function UploadModal() {
                 </div>
                 <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                   <span className="text-[10px] font-bold uppercase text-slate-400 block">Total</span>
-                  <span className="font-bold text-brand-700 dark:text-brand-300">${(successDoc.totalAmount ?? 0).toFixed(2)}</span>
+                  <span className="font-bold text-brand-700 dark:text-brand-300">{successDoc.totalAmount != null ? `$${Number(successDoc.totalAmount).toFixed(2)}` : 'N/A'}</span>
                 </div>
                 <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                   <span className="text-[10px] font-bold uppercase text-slate-400 block">Status</span>
